@@ -8,66 +8,72 @@ import { LOCK_MANAGER_TOKEN } from './point.module';
 
 @Injectable()
 export class PointService {
-    constructor(
-        private readonly userPointTable: UserPointTable,
-        private readonly pointHistoryTable: PointHistoryTable,
-        @Inject(LOCK_MANAGER_TOKEN)
-        private readonly lockManager: ILockManager,
-    ) {}
+  constructor(
+    private readonly userPointTable: UserPointTable,
+    private readonly pointHistoryTable: PointHistoryTable,
+    @Inject(LOCK_MANAGER_TOKEN)
+    private readonly lockManager: ILockManager,
+  ) {}
 
-    async getUserPoint(userId: number): Promise<UserPoint> {
-        return await this.userPointTable.selectById(userId);
-    }
+  async getUserPoint(userId: number): Promise<UserPoint> {
+    return await this.userPointTable.selectById(userId);
+  }
 
-    async chargePoint(userId: number, amount: number): Promise<UserPoint> {
-        return await this.lockManager.withLock(userId, async () => {
-            // 충전 금액 정책 검증
-            PointPolicy.validateChargeAmount(amount);
+  async chargePoint(userId: number, amount: number): Promise<UserPoint> {
+    return await this.lockManager.withLock(userId, async () => {
+      // 충전 금액 정책 검증
+      PointPolicy.validateChargeAmount(amount);
 
-            const currentUserPoint = await this.userPointTable.selectById(userId);
-            
-            // 충전 후 잔고 정책 검증
-            PointPolicy.validateBalanceAfterCharge(currentUserPoint.point, amount);
+      const currentUserPoint = await this.userPointTable.selectById(userId);
 
-            const newAmount = currentUserPoint.point + amount;
-            const updatedUserPoint = await this.userPointTable.insertOrUpdate(userId, newAmount);
+      // 충전 후 잔고 정책 검증
+      PointPolicy.validateBalanceAfterCharge(currentUserPoint.point, amount);
 
-            await this.pointHistoryTable.insert(
-                userId,
-                amount,
-                TransactionType.CHARGE,
-                updatedUserPoint.updateMillis
-            );
+      const newAmount = currentUserPoint.point + amount;
+      const updatedUserPoint = await this.userPointTable.insertOrUpdate(
+        userId,
+        newAmount,
+      );
 
-            return updatedUserPoint;
-        });
-    }
+      await this.pointHistoryTable.insert(
+        userId,
+        amount,
+        TransactionType.CHARGE,
+        updatedUserPoint.updateMillis,
+      );
 
-    async usePoint(userId: number, amount: number): Promise<UserPoint> {
-        return await this.lockManager.withLock(userId, async () => {
-            // 사용 금액 정책 검증
-            PointPolicy.validateUseAmount(amount);
+      return updatedUserPoint;
+    });
+  }
 
-            const currentUserPoint = await this.userPointTable.selectById(userId);
-            
-            // 사용 시 잔고 검증
-            PointPolicy.validateBalanceForUse(currentUserPoint.point, amount);
+  async usePoint(userId: number, amount: number): Promise<UserPoint> {
+    return await this.lockManager.withLock(userId, async () => {
+      // 사용 금액 정책 검증
+      PointPolicy.validateUseAmount(amount);
 
-            const newAmount = currentUserPoint.point - amount;
-            const updatedUserPoint = await this.userPointTable.insertOrUpdate(userId, newAmount);
+      const currentUserPoint = await this.userPointTable.selectById(userId);
 
-            await this.pointHistoryTable.insert(
-                userId,
-                amount,
-                TransactionType.USE,
-                updatedUserPoint.updateMillis
-            );
+      // 사용 시 잔고 검증
+      PointPolicy.validateBalanceForUse(currentUserPoint.point, amount);
 
-            return updatedUserPoint;
-        });
-    }
+      const newAmount = currentUserPoint.point - amount;
+      const updatedUserPoint = await this.userPointTable.insertOrUpdate(
+        userId,
+        newAmount,
+      );
 
-    async getPointHistory(userId: number): Promise<PointHistory[]> {
-        return await this.pointHistoryTable.selectAllByUserId(userId);
-    }
+      await this.pointHistoryTable.insert(
+        userId,
+        amount,
+        TransactionType.USE,
+        updatedUserPoint.updateMillis,
+      );
+
+      return updatedUserPoint;
+    });
+  }
+
+  async getPointHistory(userId: number): Promise<PointHistory[]> {
+    return await this.pointHistoryTable.selectAllByUserId(userId);
+  }
 }
