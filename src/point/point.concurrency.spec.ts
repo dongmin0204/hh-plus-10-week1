@@ -130,4 +130,55 @@ describe('PointService Concurrency Tests', () => {
             expect(balances.every(balance => balance >= 0)).toBe(true);
         }, 10000);
     });
+
+    // 🔴 RED: 추가 동시성 시나리오 테스트
+    describe('Advanced concurrency scenarios', () => {
+        it('should handle timeout scenario when lock takes too long', async () => {
+            const userId = 4;
+            const amount = 1000;
+            
+            // 첫 번째 작업이 매우 오래 걸리는 시나리오를 Mock으로 시뮬레이션
+            let firstCallResolved = false;
+            jest.spyOn(userPointTable, 'selectById').mockImplementation(async () => {
+                if (!firstCallResolved) {
+                    // 첫 번째 호출은 5초 지연
+                    await new Promise(resolve => setTimeout(resolve, 5000));
+                    firstCallResolved = true;
+                }
+                return { id: userId, point: 1000, updateMillis: Date.now() };
+            });
+
+            // 이 테스트는 현재 timeout 처리가 없어서 실패할 것
+            const startTime = Date.now();
+            const promises = [
+                service.chargePoint(userId, amount),
+                service.chargePoint(userId, amount)
+            ];
+
+            await Promise.all(promises);
+            const endTime = Date.now();
+            
+            // 5초 이상 걸려서는 안됨 (timeout 처리가 있다면)
+            expect(endTime - startTime).toBeLessThan(3000);
+        }, 10000);
+
+        it('should prevent concurrent access from different users being blocked', async () => {
+            const user1 = 5;
+            const user2 = 6;
+            const amount = 1000;
+            
+            // 서로 다른 유저의 작업은 동시에 실행되어야 함
+            const startTime = Date.now();
+            const promises = [
+                service.chargePoint(user1, amount),
+                service.chargePoint(user2, amount)
+            ];
+
+            await Promise.all(promises);
+            const endTime = Date.now();
+            
+            // 서로 다른 유저의 경우 동시 실행되므로 빨라야 함
+            expect(endTime - startTime).toBeLessThan(2000);
+        }, 10000);
+    });
 });
