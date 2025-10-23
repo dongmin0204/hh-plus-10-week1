@@ -3,7 +3,7 @@ import { PointService } from './point.service';
 import { UserPointTable } from '../database/userpoint.table';
 import { PointHistoryTable } from '../database/pointhistory.table';
 import { TransactionType } from './point.model';
-import { LOCK_MANAGER_TOKEN } from './point.module';
+import { LOCK_MANAGER_TOKEN } from './point.constants';
 import { ILockManager } from './interfaces/lock-manager.interface';
 
 describe('PointService', () => {

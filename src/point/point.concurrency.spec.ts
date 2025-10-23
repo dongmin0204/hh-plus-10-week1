@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PointService } from './point.service';
 import { UserPointTable } from '../database/userpoint.table';
 import { PointHistoryTable } from '../database/pointhistory.table';
-import { LOCK_MANAGER_TOKEN } from './point.module';
+import { LOCK_MANAGER_TOKEN } from './point.constants';
 import { ILockManager } from './interfaces/lock-manager.interface';
 
 describe('PointService Concurrency Tests', () => {
