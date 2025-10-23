@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, ValidationPipe } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, ValidationPipe, ParseIntPipe } from "@nestjs/common";
 import { PointHistory, UserPoint } from "./point.model";
 import { PointBody as PointDto } from "./point.dto";
 import { PointService } from "./point.service";
@@ -15,18 +15,16 @@ export class PointController {
      * 특정 유저의 포인트를 조회하는 기능
      */
     @Get(':id')
-    async point(@Param('id') id): Promise<UserPoint> {
-        const userId = Number.parseInt(id)
-        return await this.pointService.getUserPoint(userId)
+    async point(@Param('id', ParseIntPipe) id: number): Promise<UserPoint> {
+        return await this.pointService.getUserPoint(id)
     }
 
     /**
      * 특정 유저의 포인트 충전/이용 내역을 조회하는 기능
      */
     @Get(':id/histories')
-    async history(@Param('id') id): Promise<PointHistory[]> {
-        const userId = Number.parseInt(id)
-        return await this.pointService.getPointHistory(userId)
+    async history(@Param('id', ParseIntPipe) id: number): Promise<PointHistory[]> {
+        return await this.pointService.getPointHistory(id)
     }
 
     /**
@@ -34,12 +32,10 @@ export class PointController {
      */
     @Patch(':id/charge')
     async charge(
-        @Param('id') id,
+        @Param('id', ParseIntPipe) id: number,
         @Body(ValidationPipe) pointDto: PointDto,
     ): Promise<UserPoint> {
-        const userId = Number.parseInt(id)
-        const amount = pointDto.amount
-        return await this.pointService.chargePoint(userId, amount)
+        return await this.pointService.chargePoint(id, pointDto.amount)
     }
 
     /**
@@ -47,11 +43,9 @@ export class PointController {
      */
     @Patch(':id/use')
     async use(
-        @Param('id') id,
+        @Param('id', ParseIntPipe) id: number,
         @Body(ValidationPipe) pointDto: PointDto,
     ): Promise<UserPoint> {
-        const userId = Number.parseInt(id)
-        const amount = pointDto.amount
-        return await this.pointService.usePoint(userId, amount)
+        return await this.pointService.usePoint(id, pointDto.amount)
     }
 }
