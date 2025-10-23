@@ -1,15 +1,18 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { UserPointTable } from '../database/userpoint.table';
 import { PointHistoryTable } from '../database/pointhistory.table';
 import { UserPoint, PointHistory, TransactionType } from './point.model';
 import { PointPolicy } from './point.policy';
-import { PointLock } from './point.lock';
+import { ILockManager } from './interfaces/lock-manager.interface';
+import { LOCK_MANAGER_TOKEN } from './point.module';
 
 @Injectable()
 export class PointService {
     constructor(
         private readonly userPointTable: UserPointTable,
         private readonly pointHistoryTable: PointHistoryTable,
+        @Inject(LOCK_MANAGER_TOKEN)
+        private readonly lockManager: ILockManager,
     ) {}
 
     async getUserPoint(userId: number): Promise<UserPoint> {
@@ -17,7 +20,7 @@ export class PointService {
     }
 
     async chargePoint(userId: number, amount: number): Promise<UserPoint> {
-        return await PointLock.withLock(userId, async () => {
+        return await this.lockManager.withLock(userId, async () => {
             // 충전 금액 정책 검증
             PointPolicy.validateChargeAmount(amount);
 
@@ -41,7 +44,7 @@ export class PointService {
     }
 
     async usePoint(userId: number, amount: number): Promise<UserPoint> {
-        return await PointLock.withLock(userId, async () => {
+        return await this.lockManager.withLock(userId, async () => {
             // 사용 금액 정책 검증
             PointPolicy.validateUseAmount(amount);
 

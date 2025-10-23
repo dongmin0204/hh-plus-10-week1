@@ -1,11 +1,19 @@
-export class PointLock {
-    private static locks = new Map<number, Promise<any>>();
-    private static readonly DEFAULT_TIMEOUT = 3000; // 3초 기본 timeout
+import { Injectable } from '@nestjs/common';
+import { ILockManager } from './interfaces/lock-manager.interface';
+
+/**
+ * 포인트 시스템 전용 Lock 관리자
+ * 의존성 주입을 통한 테스트 가능한 구조
+ */
+@Injectable()
+export class PointLockManager implements ILockManager {
+    private readonly locks = new Map<number, Promise<any>>();
+    private readonly DEFAULT_TIMEOUT = 3000; // 3초 기본 timeout
 
     /**
      * 사용자별 Lock을 사용하여 동시성 제어 (timeout 포함)
      */
-    static async withLock<T>(
+    async withLock<T>(
         userId: number, 
         operation: () => Promise<T>,
         timeoutMs: number = this.DEFAULT_TIMEOUT
@@ -34,8 +42,9 @@ export class PointLock {
 
     /**
      * Timeout Promise 생성 (테스트 가능한 구조)
+     * 시간 의존성을 분리하여 테스트에서 Mock 가능
      */
-    private static createTimeoutPromise(timeoutMs: number): Promise<void> {
+    private createTimeoutPromise(timeoutMs: number): Promise<void> {
         return new Promise((_, reject) => {
             setTimeout(() => {
                 reject(new Error('동시 처리 중입니다. 잠시 후 다시 시도해주세요.'));

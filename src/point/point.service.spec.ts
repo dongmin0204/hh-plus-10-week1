@@ -3,6 +3,8 @@ import { PointService } from './point.service';
 import { UserPointTable } from '../database/userpoint.table';
 import { PointHistoryTable } from '../database/pointhistory.table';
 import { TransactionType } from './point.model';
+import { LOCK_MANAGER_TOKEN } from './point.module';
+import { ILockManager } from './interfaces/lock-manager.interface';
 
 describe('PointService', () => {
     let service: PointService;
@@ -10,8 +12,22 @@ describe('PointService', () => {
     let pointHistoryTable: PointHistoryTable;
 
     beforeEach(async () => {
+        const mockLockManager: ILockManager = {
+            withLock: jest.fn().mockImplementation(async (userId, operation, timeoutMs) => {
+                return await operation();
+            }),
+        };
+
         const module: TestingModule = await Test.createTestingModule({
-            providers: [PointService, UserPointTable, PointHistoryTable],
+            providers: [
+                PointService, 
+                UserPointTable, 
+                PointHistoryTable,
+                {
+                    provide: LOCK_MANAGER_TOKEN,
+                    useValue: mockLockManager,
+                },
+            ],
         }).compile();
 
         service = module.get<PointService>(PointService);
