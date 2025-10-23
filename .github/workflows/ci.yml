@@ -1,0 +1,72 @@
+name: CI/CD 파이프라인
+
+on:
+  push:
+    branches: [ main, step2 ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: 테스트 실행
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+    - name: 코드 체크아웃
+      uses: actions/checkout@v4
+
+    - name: Node.js ${{ matrix.node-version }} 설정
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+
+    - name: 의존성 설치
+      run: npm ci
+
+    - name: 린트 검사
+      run: npm run lint
+
+    - name: 유닛 테스트 실행
+      run: npm test
+
+    - name: 테스트 커버리지 확인
+      run: npm run test:coverage
+
+    - name: E2E 테스트 실행
+      run: npm run test:e2e
+
+    - name: 빌드 확인
+      run: npm run build
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    name: 배포 준비
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: 코드 체크아웃
+      uses: actions/checkout@v4
+
+    - name: Node.js 설정
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+
+    - name: 의존성 설치
+      run: npm ci
+
+    - name: 프로덕션 빌드
+      run: npm run build
+
+    - name: 빌드 아티팩트 업로드
+      uses: actions/upload-artifact@v4
+      with:
+        name: dist-files
+        path: dist/
