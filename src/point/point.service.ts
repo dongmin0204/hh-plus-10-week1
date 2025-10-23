@@ -4,7 +4,7 @@ import { PointHistoryTable } from '../database/pointhistory.table';
 import { UserPoint, PointHistory, TransactionType } from './point.model';
 import { PointPolicy } from './point.policy';
 import { ILockManager } from './interfaces/lock-manager.interface';
-import { LOCK_MANAGER_TOKEN } from './point.module';
+import { LOCK_MANAGER_TOKEN } from './point.constants';
 
 @Injectable()
 export class PointService {
