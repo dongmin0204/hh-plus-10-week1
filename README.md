@@ -1,4 +1,38 @@
-# 포인트 시스템 동시성 제어 구현 분석
+# 포인트 시스템 동시성 제어 구현 분석  
+
+## 목차
+
+- [개요](#개요)
+- [1. 동시성 제어 요구사항](#1-동시성-제어-요구사항)
+  - [비즈니스 문제](#비즈니스-문제)
+  - [핵심 요구사항](#핵심-요구사항)
+- [2. 기술적 선택과 근거](#2-기술적-선택과-근거)
+  - [선택한 접근 방식: Promise 기반 Lock 시스템](#선택한-접근-방식-promise-기반-lock-시스템)
+    - [왜 이 방식을 선택했는가?](#왜-이-방식을-선택했는가)
+  - [다른 접근 방식과의 비교](#다른-접근-방식과의-비교)
+- [3. 구현 상세 분석](#3-구현-상세-분석)
+  - [3.1 핵심 Lock 메커니즘](#31-핵심-lock-메커니즘)
+  - [3.2 타임아웃 처리 전략](#32-타임아웃-처리-전략)
+- [4. TDD를 통한 검증 과정](#4-tdd를-통한-검증-과정)
+  - [4.1 Red-Green-Refactor 사이클 적용](#41-red-green-refactor-사이클-적용)
+  - [4.2 테스트 전략](#42-테스트-전략)
+- [5. 아키텍처 개선 과정](#5-아키텍처-개선-과정)
+  - [5.1 의존성 주입 도입](#51-의존성-주입-도입)
+  - [5.2 테스트 가능한 아키텍처](#52-테스트-가능한-아키텍처)
+- [6. 성능 및 한계 분석](#6-성능-및-한계-분석)
+  - [6.1 성능 특성](#61-성능-특성)
+  - [6.2 현재 구현의 한계](#62-현재-구현의-한계)
+- [7. 실제 운영 고려사항](#7-실제-운영-고려사항)
+  - [7.1 모니터링 포인트](#71-모니터링-포인트)
+  - [7.2 확장성 고려사항](#72-확장성-고려사항)
+- [8. 결론 및 배운 점](#8-결론-및-배운-점)
+  - [8.1 기술적 성과](#81-기술적-성과)
+  - [8.2 Node.js/TypeScript의 동시성 제어 특징](#82-nodejstypescript의-동시성-제어-특징)
+  - [8.3 실무 적용 권장사항](#83-실무-적용-권장사항)
+- [부록](#부록)
+  - [A. 관련 코드 파일](#a-관련-코드-파일)
+  - [B. 테스트 실행 명령어](#b-테스트-실행-명령어)
+  
 
 ## 개요
 
@@ -99,6 +133,17 @@ async withLock<T>(
 - **finally()**: 성공/실패 관계없이 Lock 해제 보장
 - **사용자별 독립성**: Map의 userId 키로 개별 관리
 
+**로직 플로우 차트**  
+  
+<img width="530" height="750" alt="image" src="https://github.com/user-attachments/assets/bcd98c8b-63d6-4faf-b2f0-6a66b74798b6" />
+
+
+**IF 같이 들어 왔지만 동시 요청 시퀀스 (병렬 처리)**  
+
+<img width="530" height="750" alt="Mermaid Chart - Create complex, visual diagrams with text -2025-10-23-184512" src="https://github.com/user-attachments/assets/8ecbf82b-1fda-4d01-b240-9ad97bab090e" />
+  
+  
+
 ### 3.2 타임아웃 처리 전략
 
 ```typescript
@@ -111,6 +156,12 @@ private createTimeoutPromise(timeoutMs: number): Promise<void> {
 }
 ```
 
+
+**동일 사용자 동시 요청 시퀀스 (순차 처리 & 3초 타임아웃)**  
+  
+  <img width="1000" height="900" alt="Mermaid Chart - Create complex, visual diagrams with text -2025-10-23-184318" src="https://github.com/user-attachments/assets/94676e84-4a6d-4c2b-bce9-52e1adddc60d" />
+
+  
 **장점:**
 - 사용자 경험 개선: 명확한 에러 메시지
 - 리소스 보호: 장시간 대기 방지
@@ -328,4 +379,5 @@ npm test src/point/point.concurrency.spec.ts
 
 # 정책 테스트 실행
 npm test src/point/point.policy.spec.ts
+
 ```
