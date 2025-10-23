@@ -141,25 +141,31 @@ describe('PointService Concurrency Tests', () => {
             let firstCallResolved = false;
             jest.spyOn(userPointTable, 'selectById').mockImplementation(async () => {
                 if (!firstCallResolved) {
-                    // 첫 번째 호출은 5초 지연
+                    // 첫 번째 호출은 5초 지연 (timeout보다 길게)
                     await new Promise(resolve => setTimeout(resolve, 5000));
                     firstCallResolved = true;
                 }
                 return { id: userId, point: 1000, updateMillis: Date.now() };
             });
 
-            // 이 테스트는 현재 timeout 처리가 없어서 실패할 것
-            const startTime = Date.now();
+            jest.spyOn(userPointTable, 'insertOrUpdate').mockResolvedValue({
+                id: userId, point: 2000, updateMillis: Date.now()
+            });
+
+            jest.spyOn(pointHistoryTable, 'insert').mockResolvedValue({
+                id: 1, userId, type: 0, amount, timeMillis: Date.now()
+            });
+
+            // 동시 요청 중 두 번째는 timeout으로 실패해야 함
             const promises = [
-                service.chargePoint(userId, amount),
-                service.chargePoint(userId, amount)
+                service.chargePoint(userId, amount), // 5초 걸림
+                service.chargePoint(userId, amount)  // 3초 timeout 발생
             ];
 
-            await Promise.all(promises);
-            const endTime = Date.now();
-            
-            // 5초 이상 걸려서는 안됨 (timeout 처리가 있다면)
-            expect(endTime - startTime).toBeLessThan(3000);
+            // 두 번째 요청이 timeout 에러로 실패하는지 확인
+            await expect(Promise.all(promises)).rejects.toThrow(
+                '동시 처리 중입니다. 잠시 후 다시 시도해주세요.'
+            );
         }, 10000);
 
         it('should prevent concurrent access from different users being blocked', async () => {
