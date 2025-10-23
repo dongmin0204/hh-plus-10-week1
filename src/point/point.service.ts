@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { UserPointTable } from '../database/userpoint.table';
 import { PointHistoryTable } from '../database/pointhistory.table';
 import { UserPoint, PointHistory, TransactionType } from './point.model';
+import { PointPolicy } from './point.policy';
+import { PointLock } from './point.lock';
 
 @Injectable()
 export class PointService {
@@ -15,46 +17,51 @@ export class PointService {
     }
 
     async chargePoint(userId: number, amount: number): Promise<UserPoint> {
-        if (amount <= 0) {
-            throw new Error('충전 금액은 0보다 커야 합니다.');
-        }
+        return await PointLock.withLock(userId, async () => {
+            // 충전 금액 정책 검증
+            PointPolicy.validateChargeAmount(amount);
 
-        const currentUserPoint = await this.userPointTable.selectById(userId);
-        const newAmount = currentUserPoint.point + amount;
-        const updatedUserPoint = await this.userPointTable.insertOrUpdate(userId, newAmount);
+            const currentUserPoint = await this.userPointTable.selectById(userId);
+            
+            // 충전 후 잔고 정책 검증
+            PointPolicy.validateBalanceAfterCharge(currentUserPoint.point, amount);
 
-        await this.pointHistoryTable.insert(
-            userId,
-            amount,
-            TransactionType.CHARGE,
-            updatedUserPoint.updateMillis
-        );
+            const newAmount = currentUserPoint.point + amount;
+            const updatedUserPoint = await this.userPointTable.insertOrUpdate(userId, newAmount);
 
-        return updatedUserPoint;
+            await this.pointHistoryTable.insert(
+                userId,
+                amount,
+                TransactionType.CHARGE,
+                updatedUserPoint.updateMillis
+            );
+
+            return updatedUserPoint;
+        });
     }
 
     async usePoint(userId: number, amount: number): Promise<UserPoint> {
-        if (amount <= 0) {
-            throw new Error('사용 금액은 0보다 커야 합니다.');
-        }
+        return await PointLock.withLock(userId, async () => {
+            // 사용 금액 정책 검증
+            PointPolicy.validateUseAmount(amount);
 
-        const currentUserPoint = await this.userPointTable.selectById(userId);
-        
-        if (currentUserPoint.point < amount) {
-            throw new Error('포인트가 부족합니다.');
-        }
+            const currentUserPoint = await this.userPointTable.selectById(userId);
+            
+            // 사용 시 잔고 검증
+            PointPolicy.validateBalanceForUse(currentUserPoint.point, amount);
 
-        const newAmount = currentUserPoint.point - amount;
-        const updatedUserPoint = await this.userPointTable.insertOrUpdate(userId, newAmount);
+            const newAmount = currentUserPoint.point - amount;
+            const updatedUserPoint = await this.userPointTable.insertOrUpdate(userId, newAmount);
 
-        await this.pointHistoryTable.insert(
-            userId,
-            amount,
-            TransactionType.USE,
-            updatedUserPoint.updateMillis
-        );
+            await this.pointHistoryTable.insert(
+                userId,
+                amount,
+                TransactionType.USE,
+                updatedUserPoint.updateMillis
+            );
 
-        return updatedUserPoint;
+            return updatedUserPoint;
+        });
     }
 
     async getPointHistory(userId: number): Promise<PointHistory[]> {

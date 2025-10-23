@@ -235,4 +235,113 @@ describe('PointService', () => {
             expect(pointHistoryTable.selectAllByUserId).toHaveBeenCalledWith(userId);
         });
     });
+
+    // Step2: 정책 관련 테스트 추가
+    describe('Step2 Policy Tests', () => {
+        describe('chargePoint - policy validation', () => {
+            it('should throw error when charge amount exceeds max limit', async () => {
+                const userId = 1;
+                const chargeAmount = 100001; // 최대 충전 한도 초과
+
+                await expect(service.chargePoint(userId, chargeAmount)).rejects.toThrow(
+                    '일회 최대 충전 한도를 초과했습니다. (최대: 100,000 포인트)'
+                );
+            });
+
+            it('should throw error when balance would exceed max after charge', async () => {
+                const userId = 1;
+                const chargeAmount = 50000;
+                const currentBalance = 960000; // 충전 후 1,010,000이 되어 최대 잔고 초과
+
+                jest.spyOn(userPointTable, 'selectById').mockResolvedValue({
+                    id: userId,
+                    point: currentBalance,
+                    updateMillis: Date.now(),
+                });
+
+                await expect(service.chargePoint(userId, chargeAmount)).rejects.toThrow(
+                    '최대 잔고를 초과할 수 없습니다. (최대: 1,000,000 포인트)'
+                );
+            });
+
+            it('should successfully charge when within all limits', async () => {
+                const userId = 1;
+                const chargeAmount = 50000;
+                const currentBalance = 500000;
+                const newBalance = 550000;
+                const updateTime = Date.now();
+
+                jest.spyOn(userPointTable, 'selectById').mockResolvedValue({
+                    id: userId,
+                    point: currentBalance,
+                    updateMillis: updateTime - 1000,
+                });
+
+                jest.spyOn(userPointTable, 'insertOrUpdate').mockResolvedValue({
+                    id: userId,
+                    point: newBalance,
+                    updateMillis: updateTime,
+                });
+
+                jest.spyOn(pointHistoryTable, 'insert').mockResolvedValue({
+                    id: 1,
+                    userId,
+                    type: TransactionType.CHARGE,
+                    amount: chargeAmount,
+                    timeMillis: updateTime,
+                });
+
+                const result = await service.chargePoint(userId, chargeAmount);
+
+                expect(result.point).toBe(newBalance);
+                expect(userPointTable.selectById).toHaveBeenCalledWith(userId);
+                expect(userPointTable.insertOrUpdate).toHaveBeenCalledWith(userId, newBalance);
+            });
+        });
+
+        describe('usePoint - policy validation', () => {
+            it('should throw error when use amount exceeds max limit', async () => {
+                const userId = 1;
+                const useAmount = 50001; // 최대 사용 한도 초과
+
+                await expect(service.usePoint(userId, useAmount)).rejects.toThrow(
+                    '일회 최대 사용 한도를 초과했습니다. (최대: 50,000 포인트)'
+                );
+            });
+
+            it('should successfully use points when within all limits', async () => {
+                const userId = 1;
+                const useAmount = 30000;
+                const currentBalance = 100000;
+                const newBalance = 70000;
+                const updateTime = Date.now();
+
+                jest.spyOn(userPointTable, 'selectById').mockResolvedValue({
+                    id: userId,
+                    point: currentBalance,
+                    updateMillis: updateTime - 1000,
+                });
+
+                jest.spyOn(userPointTable, 'insertOrUpdate').mockResolvedValue({
+                    id: userId,
+                    point: newBalance,
+                    updateMillis: updateTime,
+                });
+
+                jest.spyOn(pointHistoryTable, 'insert').mockResolvedValue({
+                    id: 1,
+                    userId,
+                    type: TransactionType.USE,
+                    amount: useAmount,
+                    timeMillis: updateTime,
+                });
+
+                const result = await service.usePoint(userId, useAmount);
+
+                expect(result.point).toBe(newBalance);
+                expect(userPointTable.selectById).toHaveBeenCalledWith(userId);
+                expect(userPointTable.insertOrUpdate).toHaveBeenCalledWith(userId, newBalance);
+            });
+        });
+    });
 });

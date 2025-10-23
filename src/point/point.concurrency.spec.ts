@@ -21,17 +21,12 @@ describe('PointService Concurrency Tests', () => {
     describe('Concurrent charge operations', () => {
         it('should handle concurrent charge requests for same user correctly', async () => {
             const userId = 1;
-            const initialBalance = 10000;
             const chargeAmount = 5000;
             
-            // 초기 상태 설정
-            jest.spyOn(userPointTable, 'selectById').mockResolvedValue({
-                id: userId,
-                point: initialBalance,
-                updateMillis: Date.now(),
-            });
-
-            // 동시에 충전 요청을 2번 보내면 최종 잔고는 20000이어야 함
+            // Mock 제거하고 실제 테이블 동작 활용
+            // 초기 상태는 테이블의 기본 동작을 따름 (신규 유저 0 포인트)
+            
+            // 동시에 충전 요청을 2번 보내면 최종 잔고는 10000이어야 함
             const promises = [
                 service.chargePoint(userId, chargeAmount),
                 service.chargePoint(userId, chargeAmount)
@@ -39,28 +34,23 @@ describe('PointService Concurrency Tests', () => {
 
             const results = await Promise.all(promises);
             
-            // 두 번째 충전이 첫 번째 충전 결과를 고려해서 처리되어야 함
-            // 현재는 동시성 제어가 없어서 이 테스트가 실패할 것
+            // Lock으로 인해 순차적으로 처리되어야 함
             const finalBalances = results.map(result => result.point);
-            const expectedFinalBalance = initialBalance + (chargeAmount * 2); // 20000
+            const expectedFinalBalance = chargeAmount * 2; // 10000
             
-            // 최종 잔고가 예상과 일치해야 함
+            // 최종 잔고 중 가장 높은 값이 모든 충전이 적용된 결과여야 함
             expect(Math.max(...finalBalances)).toBe(expectedFinalBalance);
         }, 10000);
     });
 
     describe('Concurrent use operations', () => {
         it('should handle concurrent use requests for same user correctly', async () => {
-            const userId = 1;
+            const userId = 2; // 다른 유저 ID 사용
             const initialBalance = 20000;
             const useAmount = 5000;
             
-            // 초기 상태 설정
-            jest.spyOn(userPointTable, 'selectById').mockResolvedValue({
-                id: userId,
-                point: initialBalance,
-                updateMillis: Date.now(),
-            });
+            // 먼저 초기 잔고 설정
+            await service.chargePoint(userId, initialBalance);
 
             // 동시에 사용 요청을 2번 보내면 최종 잔고는 10000이어야 함
             const promises = [
@@ -70,47 +60,74 @@ describe('PointService Concurrency Tests', () => {
 
             const results = await Promise.all(promises);
             
-            // 두 번째 사용이 첫 번째 사용 결과를 고려해서 처리되어야 함
+            // Lock으로 인해 순차적으로 처리되어야 함
             const finalBalances = results.map(result => result.point);
             const expectedFinalBalance = initialBalance - (useAmount * 2); // 10000
             
-            // 최종 잔고가 예상과 일치해야 함
+            // 최종 잔고 중 가장 낮은 값이 모든 사용이 적용된 결과여야 함
             expect(Math.min(...finalBalances)).toBe(expectedFinalBalance);
         }, 10000);
     });
 
     describe('Mixed concurrent operations', () => {
         it('should handle concurrent charge and use requests correctly', async () => {
-            const userId = 1;
+            const userId = 3;
             const initialBalance = 15000;
             const chargeAmount = 3000;
             const useAmount = 2000;
             
-            // 초기 상태 설정
-            jest.spyOn(userPointTable, 'selectById').mockResolvedValue({
-                id: userId,
-                point: initialBalance,
-                updateMillis: Date.now(),
+            // Mock을 사용해서 예측 가능한 테스트 만들기
+            let currentBalance = initialBalance;
+            let callCount = 0;
+            
+            // selectById Mock: 호출될 때마다 현재 잔고 반환
+            jest.spyOn(userPointTable, 'selectById').mockImplementation(async (id: number) => {
+                return {
+                    id,
+                    point: currentBalance,
+                    updateMillis: Date.now(),
+                };
+            });
+            
+            // insertOrUpdate Mock: 잔고 업데이트 시뮬레이션
+            jest.spyOn(userPointTable, 'insertOrUpdate').mockImplementation(async (id: number, newAmount: number) => {
+                currentBalance = newAmount; // 상태 업데이트
+                callCount++;
+                return {
+                    id,
+                    point: newAmount,
+                    updateMillis: Date.now(),
+                };
+            });
+            
+            // insert Mock: 히스토리 기록
+            jest.spyOn(pointHistoryTable, 'insert').mockResolvedValue({
+                id: 1,
+                userId,
+                type: 0,
+                amount: 0,
+                timeMillis: Date.now(),
             });
 
-            // 동시에 충전과 사용 요청
+            // 동시에 충전과 사용 요청 (Lock으로 순차 처리되어야 함)
             const promises = [
-                service.chargePoint(userId, chargeAmount), // +3000
-                service.usePoint(userId, useAmount),       // -2000  
-                service.chargePoint(userId, chargeAmount)  // +3000
+                service.chargePoint(userId, chargeAmount), // 15000 + 3000 = 18000
+                service.usePoint(userId, useAmount),       // 18000 - 2000 = 16000  
+                service.chargePoint(userId, chargeAmount)  // 16000 + 3000 = 19000
             ];
 
             const results = await Promise.all(promises);
             
-            // 최종 잔고는 15000 + 3000 - 2000 + 3000 = 19000이어야 함
-            const expectedFinalBalance = initialBalance + chargeAmount - useAmount + chargeAmount;
+            // Lock으로 인해 순차 처리되어 모든 연산이 정확히 3번 호출되어야 함
+            expect(callCount).toBe(3);
             
-            // 모든 연산이 순차적으로 적용되었는지 확인
-            // 현재는 동시성 제어가 없어서 예상과 다를 것
+            // 최종 결과는 순차 처리된 결과여야 함
+            const expectedFinalBalance = initialBalance + chargeAmount - useAmount + chargeAmount; // 19000
+            expect(currentBalance).toBe(expectedFinalBalance);
+            
+            // 모든 결과가 유효해야 함
             const balances = results.map(result => result.point);
-            const maxBalance = Math.max(...balances);
-            
-            expect(maxBalance).toBe(expectedFinalBalance);
+            expect(balances.every(balance => balance >= 0)).toBe(true);
         }, 10000);
     });
 });
